@@ -28,20 +28,33 @@ public:
     bool InList(list<Location>& locationList, const Location& location);
     void AddLocation(list<Location>& locationList, const Location& location);
     void AddAdjacentLocations(list<Location>& locationList, const Location& location);
+    void AddFrontier(list<Location> &locationList, const Location &location);
     bool WithinWorld(Location& location);
     void Output();
     void FindWumpus();
+    void Arrowwumpus();
     void ResetSafeLocations();
+    void ResetFrontier();
+    void ResetpossibleWumpus();
+    void RemoveFrontier(Location& location);
+    void FilterFrontier();
     void UpdateSafeLocation();
+    Location UnvisitFrontier();
     void RemoveSafeLocation(int x, int y);
 
+    list<Location> frontier;
+    list<Location> possibleWumpus;
     list<Location> stenchLocations;
+    list<Location> pitLocations;
     list<Location> breezeLocations;
     list<Location> safeLocations;
+    list<Location> goodLocations;
     list<Location> visitedLocations;
     bool firstTry;
+    bool onlyWumpus;
     WorldState worldState;
     Action previousAction;
+    Action pre;
 
 };
 
