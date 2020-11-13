@@ -32,12 +32,13 @@ public:
     bool WithinWorld(Location& location);
     void Output();
     void FindWumpus();
-    void Arrowwumpus();
+    void PossibleWumpusLocation();
     void ResetSafeLocations();
     void ResetFrontier();
     void ResetpossibleWumpus();
     void RemoveFrontier(Location& location);
     void FilterFrontier();
+    Location ChooseFrontier();
     void UpdateSafeLocation();
     Location UnvisitFrontier();
     void RemoveSafeLocation(int x, int y);

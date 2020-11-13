@@ -21,6 +21,7 @@ Agent::~Agent ()
 
 void Agent::Initialize ()
 {
+    //  if the last action was forward, it means we died in pit last time, update the positions of pit and frontier
     if (pre == GOFORWARD){
         Location tmp;
         if (worldState.agentOrientation == RIGHT) {
@@ -51,13 +52,14 @@ void Agent::Initialize ()
         worldState.goldLocation = Location(0,0);
         worldState.worldSize = 0;
     }
-
+    // if we know the location of gold, then go directly
     else {
         if (!(worldState.goldLocation == Location(0,0))) {
             list<Action> actionList2;
             list<Action> actionList1;
             Location shootLocation = worldState.agentLocation;
             Orientation ori = worldState.agentOrientation;
+            // if we know the location of wumpus, it’s better to kill it first to avoid being affected
             if (!(worldState.wumpusLocation == Location(0,0))){
                 shootLocation = stenchLocations.front();
                 if (shootLocation.X == worldState.wumpusLocation.X){
@@ -101,16 +103,19 @@ Action Agent::Process (Percept& percept)
 	    if (worldState.agentHasGold && (worldState.agentLocation == Location(1,1))) {
 	        actionList.push_back(CLIMB);
 	    }
+	    // go to safe location that have not been visited
 	    else if (visitedLocations.size() < safeLocations.size()){
             actionList2 = searchEngine.FindPath(worldState.agentLocation, worldState.agentOrientation, UnvisitSafeLoction (), worldState.agentOrientation);
             actionList.splice(actionList.end(), actionList2);
         }
+        // if we don’t know the location of wumpus and fail to kill wumpus with an arrow, then we need to add ammunition
         else if (!worldState.agentHasArrow && worldState.wumpusAlive) {
             actionList.clear();
             actionList2 = searchEngine.FindPath(worldState.agentLocation, worldState.agentOrientation, Location(1,1), worldState.agentOrientation);
             actionList.splice(actionList.end(), actionList2);
             actionList.push_back(CLIMB);
         }
+        // if we know the location of wumpus, kill it
 	    else if (worldState.wumpusAlive && !(worldState.wumpusLocation == Location(0, 0)) &&
                  worldState.agentHasArrow){
             shootLocation = stenchLocations.front();
@@ -131,8 +136,8 @@ Action Agent::Process (Percept& percept)
             actionList.splice(actionList.end(), actionList2);
             actionList.push_back(SHOOT);
 	    }
+	    // if we don’t know the location of wumpus, try to find it with an arrow
 	    else if (worldState.wumpusLocation == Location(0,0) && !possibleWumpus.empty() && worldState.agentHasArrow) {
-            cout << "22222222222222222222222222222";
 	        Location target = possibleWumpus.front();
 //	        possibleWumpus.pop_front();
             shootLocation = stenchLocations.front();
@@ -153,14 +158,20 @@ Action Agent::Process (Percept& percept)
             actionList.splice(actionList.end(), actionList2);
             actionList.push_back(SHOOT);
 	    }
+	    // Try to take risks, find the frontier with the smallest pit probability
 	    else if (!frontier.empty()){
-            cout << "alllllllllllll";
-            Location unsafeLocation = UnvisitFrontier();
+            Location unsafeLocation = ChooseFrontier();
             AddLocation(safeLocations, unsafeLocation);
             actionList2 = searchEngine.FindPath(worldState.agentLocation, worldState.agentOrientation, unsafeLocation, worldState.agentOrientation);
             safeLocations.remove(unsafeLocation);
             searchEngine.RemoveSafeLocation(unsafeLocation.X, unsafeLocation.Y);
             actionList.splice(actionList.end(), actionList2);
+	    }
+	    else {
+            actionList.clear();
+            actionList2 = searchEngine.FindPath(worldState.agentLocation, worldState.agentOrientation, Location(1,1), worldState.agentOrientation);
+            actionList.splice(actionList.end(), actionList2);
+            actionList.push_back(CLIMB);
 	    }
 	}
         Action action = actionList.front();
@@ -180,7 +191,7 @@ void Agent::UpdateState (Percept& percept) {
     switch (previousAction) {
         case GOFORWARD:
             if (percept.Bump) {
-                // Rule 2c try to set the world size
+                // try to set the world size
                 if (worldState.agentOrientation == RIGHT) {
                     worldState.worldSize = worldState.agentLocation.X;
                 }
@@ -188,7 +199,7 @@ void Agent::UpdateState (Percept& percept) {
                     worldState.worldSize = worldState.agentLocation.Y;
                 }
                 if (worldState.worldSize > 0) {
-                    // if we got the world size, we could remove some safe locations outside the world
+                    // if we got the world size, we could remove some safe locations, Frontier and possible Wumpus locations outside the world
                     ResetSafeLocations ();
                     ResetFrontier ();
                     ResetpossibleWumpus();
@@ -208,7 +219,6 @@ void Agent::UpdateState (Percept& percept) {
             worldState.agentOrientation = (Orientation) orientationInt;
             break;
 
-        // Rule 3
         case GRAB:
             worldState.agentHasGold = true;
             worldState.goldLocation = worldState.agentLocation;
@@ -221,7 +231,6 @@ void Agent::UpdateState (Percept& percept) {
             worldState.agentHasArrow = false;
             if (percept.Scream){
                 worldState.wumpusAlive = false;
-//                possibleWumpus.clear();
                 switch (worldState.agentOrientation) {
                     case RIGHT:
                         worldState.wumpusLocation = Location(worldState.agentLocation.X + 1, worldState.agentLocation.Y);
@@ -236,6 +245,7 @@ void Agent::UpdateState (Percept& percept) {
                         worldState.wumpusLocation = Location(worldState.agentLocation.X, worldState.agentLocation.Y - 1);
                         break;
                 }
+                // after killing wumpus, try to add a new safe location
                 if (!InList(pitLocations,worldState.wumpusLocation)) {
                     AddLocation(safeLocations,worldState.wumpusLocation);
                 }
@@ -243,6 +253,7 @@ void Agent::UpdateState (Percept& percept) {
 //                    AddLocation(safeLocations,worldState.wumpusLocation);
 //                }
             }else {
+                // If we fail to kill wumpus, we can at least rule out a possible wumpus location
                 switch (worldState.agentOrientation) {
                     case RIGHT:
                         possibleWumpus.remove(Location(worldState.agentLocation.X + 1, worldState.agentLocation.Y));
@@ -260,29 +271,31 @@ void Agent::UpdateState (Percept& percept) {
             }
             break;
     }
-
-    // update safe locations, visit locations, stench locations and breeze locations
+    // update frontier, safe locations, visit locations, stench locations and breeze locations
     AddLocation (safeLocations, worldState.agentLocation);
     AddLocation (visitedLocations, worldState.agentLocation);
+    // frontier should not have been visited
     frontier.remove(worldState.agentLocation);
     if (percept.Stench) {
         AddLocation (stenchLocations, worldState.agentLocation);
     }
+    // if there is no stench in a location, it means that there is no wumpus around it
     if (!percept.Stench) {
         AddLocation (goodLocations, worldState.agentLocation);
         AddAdjacentLocations (goodLocations, worldState.agentLocation);
     }
     if (percept.Breeze) {
         AddLocation (breezeLocations, worldState.agentLocation);
+        // Sense the breeze, add some frontier
         AddFrontier(frontier,worldState.agentLocation);
     }
     if ((!percept.Stench && !percept.Breeze) || (!percept.Breeze && !worldState.wumpusAlive)) {
+        //If wumpus is dead, there is no need to consider stench
         AddAdjacentLocations (safeLocations, worldState.agentLocation);
-//        RemoveFrontier (worldState.agentLocation);
     }
-    // Rule 2f find the Wumpus
+    // find the Wumpus
     if (worldState.wumpusLocation == Location(0,0) && !stenchLocations.empty() && worldState.wumpusAlive) {
-        Arrowwumpus();
+        PossibleWumpusLocation();
     }
     // if we found the Wumpus, check if we could add some safe locations
     if (worldState.wumpusLocation == Location(0,0)){
@@ -290,19 +303,24 @@ void Agent::UpdateState (Percept& percept) {
         UpdateSafeLocation();
     }
     if (!(worldState.wumpusLocation == Location(0,0)) && worldState.agentLocation == worldState.wumpusLocation) {
+        // If we have ever been to wumpus location, there is no pit there
         onlyWumpus = true;
     }
+    // If there is no breeze in a location, there must be no pit around it
     if (!percept.Breeze) {
         RemoveFrontier (worldState.agentLocation);
     }
     Output();
 }
 
-void Agent::Arrowwumpus() {
+
+// find the possible wumpus location
+void Agent::PossibleWumpusLocation() {
     Location location1, location2;
     list<Location>::iterator itr1, itr2;
     list<Location> tmps;
     list<Location> adjacents;
+    // Filter out the non-overlapping positions between stench
     for (itr1 = stenchLocations.begin(); itr1 != stenchLocations.end(); ++itr1) {
         location1 = *itr1;
         adjacents.clear();
@@ -320,6 +338,7 @@ void Agent::Arrowwumpus() {
             }
         }
     }
+    // Filter again according to the position of "No stench and its neighbors"
     tmps = possibleWumpus;
     possibleWumpus.clear();
     for (itr1 = tmps.begin(); itr1 != tmps.end(); ++itr1) {
@@ -327,42 +346,9 @@ void Agent::Arrowwumpus() {
         if (InList(goodLocations, location1)) continue;
         possibleWumpus.push_back(location1);
     }
+    // if the number of possible Wumpus location == 1, then we find the wumpus
     if (possibleWumpus.size() == 1){
         worldState.wumpusLocation = possibleWumpus.front();
-    }
-}
-
-void Agent::FindWumpus () {
-    Location location1, location2;
-    location1 = stenchLocations.back();
-    for (list<Location>::iterator itr = stenchLocations.begin(); itr != stenchLocations.end(); ++itr) {
-        location2 = *itr;
-        if (location2.X == location1.X - 1 && location2.Y == location1.Y + 1){
-            cout << "ori1111111111111111111111111111111111111111111111111111111: " ;
-            if (InList (goodLocations,Location(location1.X - 1,location1.Y))){
-                worldState.wumpusLocation = Location(location1.X,location1.Y + 1);
-            }else if (InList (goodLocations,Location(location1.X,location1.Y + 1))){
-                worldState.wumpusLocation = Location(location1.X - 1,location1.Y);
-            }
-        }else if (location2.X == location1.X + 1 && location2.Y == location1.Y - 1){
-            if (InList (goodLocations,Location(location1.X,location1.Y - 1))){
-                worldState.wumpusLocation = Location(location1.X + 1,location1.Y);
-            }else if (InList (goodLocations,Location(location1.X + 1,location1.Y))){
-                worldState.wumpusLocation = Location(location1.X,location1.Y - 1);
-            }
-        }else if (location2.X == location1.X - 1 && location2.Y == location1.Y - 1){
-            if (InList (goodLocations,Location(location1.X,location1.Y - 1))){
-                worldState.wumpusLocation = Location(location1.X - 1,location1.Y);
-            }else if (InList (goodLocations,Location(location1.X - 1,location1.Y))){
-                worldState.wumpusLocation = Location(location1.X,location1.Y - 1);
-            }
-        }else if (location2.X == location1.X + 1 && location2.Y == location1.Y + 1){
-            if (InList (goodLocations,Location(location1.X,location1.Y + 1))){
-                worldState.wumpusLocation = Location(location1.X + 1,location1.Y);
-            }else if (InList (goodLocations,Location(location1.X + 1,location1.Y))){
-                worldState.wumpusLocation = Location(location1.X,location1.Y + 1);
-            }
-        }
     }
 }
 
@@ -378,11 +364,22 @@ Location Agent::UnvisitSafeLoction () {
     return Location(0,0);
 }
 
-Location Agent::UnvisitFrontier () {
+// try to find a best frontier
+Location Agent::ChooseFrontier() {
+    list<int> tmplist;
+    tmplist.clear();
+    int tmp;
+    int maxTmp;
     for (list<Location>::iterator itr = frontier.begin(); itr != frontier.end(); ++itr) {
         Location location = *itr;
-        // try to find a unsafe unvisited location within the world
-        if (!InList (visitedLocations, location) && WithinWorld (location)) {
+        tmp = abs(location.X - location.Y);
+        tmplist.push_back(tmp);
+    }
+    tmplist.sort();
+    maxTmp = tmplist.back();
+    for (list<Location>::iterator itr = frontier.begin(); itr != frontier.end(); ++itr) {
+        Location location = *itr;
+        if (abs(location.X - location.Y) == maxTmp) {
             cout << "tmp unsafe Location: (" << location.X << "," <<location.Y << ")\n";
             return location;
         }
@@ -499,6 +496,7 @@ void Agent::ResetSafeLocations () {
     }
 }
 
+// remove frontier outside the world
 void Agent::ResetFrontier() {
     int worldSize = worldState.worldSize;
     list<Location> tmpLocations = frontier;
@@ -513,6 +511,7 @@ void Agent::ResetFrontier() {
     }
 }
 
+// remove possibleWumpus locations outside the world
 void Agent::ResetpossibleWumpus() {
     int worldSize = worldState.worldSize;
     list<Location> tmpLocations = possibleWumpus;
@@ -555,7 +554,6 @@ bool Agent::WithinWorld (Location& location) {
 void Agent::Output () {
     list<Location>::iterator itr;
     Location location;
-    cout << "onlyWumpus: " << onlyWumpus << endl;
     cout << "World Size: " << worldState.worldSize << endl;
     cout << "current Location: (" << worldState.agentLocation.X << "," << worldState.agentLocation.Y << ")\n";
     cout << "wumpus Location: (" << worldState.wumpusLocation.X << "," <<worldState.wumpusLocation.Y << ")\n";
